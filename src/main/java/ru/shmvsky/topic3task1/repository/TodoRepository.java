@@ -9,7 +9,6 @@ import ru.shmvsky.topic3task1.entity.Todo;
 import java.sql.Date;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.time.LocalDate;
 import java.util.List;
 
 @Repository
@@ -19,6 +18,10 @@ public class TodoRepository {
 
     public TodoRepository(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
+    }
+
+    public void deleteAll() {
+        jdbcTemplate.update("DELETE FROM todos");
     }
 
     private static final class TodoMapper implements RowMapper<Todo> {

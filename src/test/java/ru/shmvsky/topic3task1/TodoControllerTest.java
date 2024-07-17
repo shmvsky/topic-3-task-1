@@ -1,26 +1,42 @@
 package ru.shmvsky.topic3task1;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
 import ru.shmvsky.topic3task1.entity.Todo;
 import ru.shmvsky.topic3task1.service.TodoService;
 
-import java.util.Arrays;
-import java.util.List;
+import java.time.LocalDate;
 
-import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
+@Testcontainers
 @SpringBootTest
 @AutoConfigureMockMvc
 public class TodoControllerTest {
+
+    @Container
+    private final static PostgreSQLContainer<?> pg =
+            new PostgreSQLContainer<>("postgres:16");
+
+    @DynamicPropertySource
+    static void configureProperties(DynamicPropertyRegistry registry) {
+        registry.add("spring.datasource.url", pg::getJdbcUrl);
+        registry.add("spring.datasource.username", pg::getUsername);
+        registry.add("spring.datasource.password", pg::getPassword);
+    }
 
     @Autowired
     private MockMvc mockMvc;
@@ -28,121 +44,97 @@ public class TodoControllerTest {
     @Autowired
     private ObjectMapper objectMapper;
 
-    @MockBean
+    @Autowired
     private TodoService todoService;
 
-    @Test
-    void getAllTodos_ShouldReturnAllTodos() throws Exception {
+
+    @BeforeEach
+    void setUp() {
         Todo todo1 = new Todo();
-        todo1.setId(1);
-        todo1.setTitle("Test 1");
-        todo1.setDescription("Description 1");
+        todo1.setTitle("Todo 1");
+        todo1.setDescription("Todo 1 desc");
         todo1.setDone(false);
+        todo1.setDueDate(LocalDate.now());
 
         Todo todo2 = new Todo();
-        todo2.setId(2);
-        todo2.setTitle("Test 2");
-        todo2.setDescription("Description 2");
-        todo2.setDone(true);
+        todo2.setTitle("Todo 2");
+        todo2.setDescription("Todo 2 desc");
+        todo2.setDone(false);
+        todo2.setDueDate(LocalDate.now());
 
-        List<Todo> expectedTodos = Arrays.asList(todo1, todo2);
+        todoService.addTodo(todo1);
+        todoService.addTodo(todo2);
+    }
 
-        when(todoService.getAllTodos()).thenReturn(expectedTodos);
-
-        mockMvc.perform(get("/todos"))
-                .andExpect(status().isOk())
-                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$[0].id").value(todo1.getId()))
-                .andExpect(jsonPath("$[0].title").value(todo1.getTitle()))
-                .andExpect(jsonPath("$[0].description").value(todo1.getDescription()))
-                .andExpect(jsonPath("$[0].done").value(todo1.getDone()))
-                .andExpect(jsonPath("$[1].id").value(todo2.getId()))
-                .andExpect(jsonPath("$[1].title").value(todo2.getTitle()))
-                .andExpect(jsonPath("$[1].description").value(todo2.getDescription()))
-                .andExpect(jsonPath("$[1].done").value(todo2.getDone()));
+    @AfterEach
+    void tearDown() {
+        for (Todo todo : todoService.getAllTodos()) {
+            todoService.deleteTodoById(todo.getId());
+        }
     }
 
     @Test
-    void getTodoById_ShouldReturnTodo_WhenIdExists() throws Exception {
-        int id = 1;
-        Todo todo = new Todo();
-        todo.setId(id);
-        todo.setTitle("Test");
-        todo.setDescription("Description");
-        todo.setDone(false);
-
-        when(todoService.getTodoById(id)).thenReturn(todo);
-
-        mockMvc.perform(get("/todos/{id}", id))
+    void getAllTodos_ShouldReturnAllTodos() throws Exception {
+        mockMvc.perform(get("/todos"))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.id").value(todo.getId()))
-                .andExpect(jsonPath("$.title").value(todo.getTitle()))
-                .andExpect(jsonPath("$.description").value(todo.getDescription()))
-                .andExpect(jsonPath("$.done").value(todo.getDone()));
+                .andExpect(jsonPath("$[0].title").value("Todo 1"))
+                .andExpect(jsonPath("$[0].description").value("Todo 1 desc"))
+                .andExpect(jsonPath("$[0].done").value(false))
+                .andExpect(jsonPath("$[1].title").value("Todo 2"))
+                .andExpect(jsonPath("$[1].description").value("Todo 2 desc"))
+                .andExpect(jsonPath("$[1].done").value(false));
     }
 
     @Test
     void getTodoById_ShouldReturnNotFound_WhenIdDoesNotExist() throws Exception {
-        int id = 1;
-
-        when(todoService.getTodoById(id)).thenReturn(null);
-
-        mockMvc.perform(get("/todos/{id}", id))
+        mockMvc.perform(get("/todos/{id}", 666))
                 .andExpect(status().isNotFound());
     }
 
     @Test
     void addTodo_ShouldCreateTodo() throws Exception {
         Todo todo = new Todo();
-        todo.setTitle("Test");
-        todo.setDescription("Description");
-        todo.setDone(false);
+        todo.setTitle("Todo 3");
+        todo.setDescription("Todo 3 desc");
+        todo.setDone(true);
 
         mockMvc.perform(post("/todos")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(todo)))
                 .andExpect(status().isCreated());
 
-        verify(todoService, times(1)).addTodo(any(Todo.class));
     }
 
     @Test
     void updateTodo_ShouldUpdateTodo_WhenTodoExists() throws Exception {
-        int id = 1;
+
+        Integer id = todoService.getAllTodos().get(0).getId();
+
         Todo todo = new Todo();
         todo.setId(id);
-        todo.setTitle("Test");
-        todo.setDescription("Description");
+        todo.setTitle("Updated todo");
+        todo.setDescription("Updated desc");
         todo.setDone(false);
-
-        doNothing().when(todoService).updateTodo(todo);
 
         mockMvc.perform(put("/todos/{id}", id)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(todo)))
                 .andExpect(status().isOk());
-
-        verify(todoService, times(1)).updateTodo(any(Todo.class));
     }
 
     @Test
     void deleteTodoById_ShouldDeleteTodo_WhenTodoExists() throws Exception {
-        int id = 1;
 
-        doNothing().when(todoService).deleteTodoById(id);
+        Integer id = todoService.getAllTodos().get(0).getId();
 
         mockMvc.perform(delete("/todos/{id}", id))
                 .andExpect(status().isNoContent());
-
-        verify(todoService, times(1)).deleteTodoById(id);
     }
 
     @Test
     void deleteTodoById_ShouldReturnNotFound_WhenTodoDoesNotExist() throws Exception {
-        int id = 1;
-
-        doThrow(new IllegalArgumentException("Todo not found")).when(todoService).deleteTodoById(id);
+        Integer id = 666;
 
         mockMvc.perform(delete("/todos/{id}", id))
                 .andExpect(status().isNotFound());

@@ -1,123 +1,108 @@
 package ru.shmvsky.topic3task1;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
-import org.springframework.dao.DataAccessException;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.RowMapper;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
 import ru.shmvsky.topic3task1.entity.Todo;
 import ru.shmvsky.topic3task1.repository.TodoRepository;
 
 import java.time.LocalDate;
-import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.mockito.Mockito.*;
 
+@Testcontainers
+@SpringBootTest
 public class TodoRepositoryTest {
 
-    @Mock
-    private JdbcTemplate jdbcTemplate;
+    @Container
+    private final static PostgreSQLContainer<?> pg =
+            new PostgreSQLContainer<>("postgres:16");
 
-    @InjectMocks
-    private TodoRepository todoRepository;
+    @DynamicPropertySource
+    static void configureProperties(DynamicPropertyRegistry registry) {
+        registry.add("spring.datasource.url", pg::getJdbcUrl);
+        registry.add("spring.datasource.username", pg::getUsername);
+        registry.add("spring.datasource.password", pg::getPassword);
+    }
+
+    @Autowired
+    TodoRepository todoRepository;
 
     @BeforeEach
     void setUp() {
-        MockitoAnnotations.openMocks(this);
-    }
-
-    @Test
-    void findAll_ShouldReturnAllTodos() {
         Todo todo1 = new Todo();
-        todo1.setId(1);
-        todo1.setTitle("Test 1");
-        todo1.setDescription("Description 1");
+        todo1.setTitle("Todo 1");
+        todo1.setDescription("Todo 1 desc");
         todo1.setDone(false);
         todo1.setDueDate(LocalDate.now());
 
         Todo todo2 = new Todo();
-        todo2.setId(2);
-        todo2.setTitle("Test 2");
-        todo2.setDescription("Description 2");
-        todo2.setDone(true);
-        todo2.setDueDate(LocalDate.now().plusDays(1));
+        todo2.setTitle("Todo 2");
+        todo2.setDescription("Todo 2 desc");
+        todo2.setDone(false);
+        todo2.setDueDate(LocalDate.now());
 
-        List<Todo> expectedTodos = Arrays.asList(todo1, todo2);
+        todoRepository.save(todo1);
+        todoRepository.save(todo2);
+    }
 
-        when(jdbcTemplate.query(anyString(), any(RowMapper.class))).thenReturn(expectedTodos);
-
-        List<Todo> actualTodos = todoRepository.findAll();
-
-        assertEquals(expectedTodos, actualTodos);
+    @AfterEach
+    void tearDown() {
+        todoRepository.deleteAll();
     }
 
     @Test
-    void findById_ShouldReturnTodo_WhenIdExists() {
-        int id = 1;
-        Todo expectedTodo = new Todo();
-        expectedTodo.setId(id);
-        expectedTodo.setTitle("Test");
-        expectedTodo.setDescription("Description");
-        expectedTodo.setDone(false);
-        expectedTodo.setDueDate(LocalDate.now());
+    void findAll_ShouldReturnAllTodos() {
+        List<Todo> actualTodos = todoRepository.findAll();
 
-        when(jdbcTemplate.queryForObject(anyString(), any(Object[].class), any(RowMapper.class))).thenReturn(expectedTodo);
-
-        Todo actualTodo = todoRepository.findById(id);
-
-        assertEquals(expectedTodo, actualTodo);
+        assertEquals(actualTodos.size(), 2);
     }
 
     @Test
     void findById_ShouldReturnNull_WhenIdDoesNotExist() {
-        int id = 1;
-
-        when(jdbcTemplate.queryForObject(anyString(), any(Object[].class), any(RowMapper.class))).thenThrow(new DataAccessException("No data found") {});
-
-        Todo actualTodo = todoRepository.findById(id);
-
-        assertNull(actualTodo);
+        assertNull(todoRepository.findById(666));
     }
 
     @Test
     void save_ShouldInsertTodo() {
         Todo todo = new Todo();
-        todo.setTitle("Test");
-        todo.setDescription("Description");
+        todo.setTitle("Saved todo");
+        todo.setDescription("wdkjawdjkawd");
         todo.setDone(false);
         todo.setDueDate(LocalDate.now());
-
         todoRepository.save(todo);
 
-        verify(jdbcTemplate, times(1)).update(anyString(), eq(todo.getTitle()), eq(todo.getDescription()), eq(todo.getDone()), eq(todo.getDueDate()));
+        assertEquals(todoRepository.findAll().size(), 3);
     }
 
     @Test
     void update_ShouldUpdateTodo() {
         Todo todo = new Todo();
         todo.setId(1);
-        todo.setTitle("Test");
-        todo.setDescription("Description");
+        todo.setTitle("Updated Todo 1");
+        todo.setDescription("Updated todo 1 desc");
         todo.setDone(false);
         todo.setDueDate(LocalDate.now());
 
         todoRepository.update(todo);
 
-        verify(jdbcTemplate, times(1)).update(anyString(), eq(todo.getTitle()), eq(todo.getDescription()), eq(todo.getDone()), eq(todo.getDueDate()), eq(todo.getId()));
+        assertEquals(todoRepository.findById(1).getTitle(), "Updated Todo 1");
+
     }
 
     @Test
     void delete_ShouldDeleteTodoById() {
-        int id = 1;
-
-        todoRepository.delete(id);
-
-        verify(jdbcTemplate, times(1)).update(anyString(), eq(id));
+        todoRepository.delete(1);
+        assertNull(todoRepository.findById(1));
     }
+
 }

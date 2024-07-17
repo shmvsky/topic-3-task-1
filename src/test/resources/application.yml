@@ -1,12 +1,4 @@
 spring:
-  datasource:
-    url: jdbc:h2:mem:db
-    username: sa
-    password:
-    driver-class-name: org.h2.Driver
-  data:
-    jdbc:
-      dialect: h2
   flyway:
     enabled: true
     locations: classpath:db/migration
